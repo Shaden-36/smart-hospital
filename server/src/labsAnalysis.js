@@ -13,11 +13,32 @@ const RESPONSE_SCHEMA = {
   required: ["summary", "recommendations"],
 };
 
-const SYSTEM_PROMPT = `You are the AI Blood Test Analysis assistant inside "Virtual Smart
-Hospital" (المستشفى الذكي الافتراضي), a virtual hospital platform. A patient is looking at
-their own Complete Blood Count (CBC) panel and wants a plain-language explanation.
+// Same as RESPONSE_SCHEMA plus the biomarker panel the model reads off the
+// uploaded image/PDF itself, in the same shape the frontend table expects.
+const EXTRACTION_RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    panel: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING },
+          value: { type: Type.STRING },
+          unit: { type: Type.STRING },
+          range: { type: Type.STRING },
+          flag: { type: Type.STRING, enum: ["normal", "high", "low"] },
+        },
+        required: ["name", "value", "unit", "range", "flag"],
+      },
+    },
+    summary: { type: Type.STRING },
+    recommendations: { type: Type.ARRAY, items: { type: Type.STRING } },
+  },
+  required: ["panel", "summary", "recommendations"],
+};
 
-Role and boundaries:
+const BOUNDARIES = `Role and boundaries:
 - Explain what each flagged (high/low) marker generally means in plain language, and
   briefly note markers that are normal without dwelling on them.
 - Never state or imply a specific diagnosis. You may mention general, well-established
@@ -32,9 +53,35 @@ Role and boundaries:
   with a physician soon, without alarmism and without diagnosing.
 - Match the language of the "lang" field in the request — Arabic or English.
 - You are not a substitute for professional medical care, and the patient should always
-  discuss lab results with their treating physician.
+  discuss lab results with their treating physician.`;
+
+const SYSTEM_PROMPT = `You are the AI Blood Test Analysis assistant inside "Virtual Smart
+Hospital" (المستشفى الذكي الافتراضي), a virtual hospital platform. A patient is looking at
+their own Complete Blood Count (CBC) panel and wants a plain-language explanation.
+
+${BOUNDARIES}
 
 Keep "recommendations" to 3-5 short items.`;
+
+const EXTRACTION_SYSTEM_PROMPT = `You are the AI Blood Test Analysis assistant inside "Virtual
+Smart Hospital" (المستشفى الذكي الافتراضي), a virtual hospital platform. A patient has
+uploaded a photo or PDF of their own lab report.
+
+Extraction task:
+- Read every biomarker/test row you can find in the document (e.g. CBC, metabolic panel,
+  lipid panel, HbA1c — whatever is actually present).
+- For each one, output { name, value, unit, range, flag }: "range" is the reference range
+  printed on the report if present, otherwise a well-established standard adult reference
+  range for that marker. "flag" is "high"/"low" if the value falls outside that range,
+  otherwise "normal".
+- If the document contains no recognizable lab values at all (wrong file, unreadable image,
+  not a lab report), return an empty "panel" array and use "summary" to explain that plainly
+  and ask the patient to try a clearer photo or the correct file — leave "recommendations" empty.
+
+${BOUNDARIES}
+
+Keep "recommendations" to 3-5 short items. Base the summary and recommendations only on
+markers you actually extracted.`;
 
 /**
  * @param {{ sessionToken: string, panel: Array<{name:string,value:number|string,unit:string,range:string,flag:string}>, lang: 'ar'|'en' }} params
@@ -59,34 +106,81 @@ export async function getBloodTestAnalysis({ sessionToken, panel, lang }) {
     },
   });
 
-  const raw = response.text?.trim() || "";
+  const parsed = parseAnalysisJson(response.text, lang);
+  logLabsAnalysis({ sessionToken, panel, summary: parsed.summary, source: "manual" });
+  return parsed;
+}
 
+/**
+ * Reads an uploaded lab report image/PDF directly (Gemini vision/document
+ * understanding) and returns both the extracted biomarker panel and the
+ * same plain-language analysis — one round trip instead of extract-then-
+ * analyze, so the patient isn't waiting through two model calls.
+ *
+ * @param {{ sessionToken: string, fileBuffer: Buffer, mimeType: string, lang: 'ar'|'en' }} params
+ * @returns {Promise<{ panel: Array<object>, summary: string, recommendations: string[] }>}
+ */
+export async function extractAndAnalyzeBloodTest({ sessionToken, fileBuffer, mimeType, lang }) {
+  const response = await client.models.generateContent({
+    model: MODEL,
+    contents: [
+      { inlineData: { mimeType, data: fileBuffer.toString("base64") } },
+      { text: `lang: ${lang}` },
+    ],
+    config: {
+      systemInstruction: EXTRACTION_SYSTEM_PROMPT,
+      maxOutputTokens: 4096,
+      thinkingConfig: { thinkingLevel: "low" },
+      responseMimeType: "application/json",
+      responseSchema: EXTRACTION_RESPONSE_SCHEMA,
+    },
+  });
+
+  const parsed = parseAnalysisJson(response.text, lang, { withPanel: true });
+  logLabsAnalysis({ sessionToken, panel: parsed.panel, summary: parsed.summary, source: "upload" });
+  return parsed;
+}
+
+function parseAnalysisJson(raw, lang, { withPanel = false } = {}) {
   const fallback = {
+    ...(withPanel ? { panel: [] } : {}),
     summary: lang === "ar"
       ? "عذرًا، ما قدرنا نجهز التحليل الآن. حاول مرة أخرى بعد قليل."
       : "Sorry, we couldn't prepare the analysis right now. Please try again shortly.",
     recommendations: [],
   };
 
-  let parsed = fallback;
   try {
-    const jsonText = extractJson(raw);
+    const jsonText = extractJson((raw || "").trim());
     const candidate = JSON.parse(jsonText);
-    if (typeof candidate.summary === "string" && Array.isArray(candidate.recommendations)) {
-      parsed = {
-        summary: candidate.summary.slice(0, 2000),
-        recommendations: candidate.recommendations
-          .filter((r) => typeof r === "string")
-          .slice(0, 8)
-          .map((r) => r.slice(0, 400)),
-      };
+    if (typeof candidate.summary !== "string" || !Array.isArray(candidate.recommendations)) {
+      return fallback;
     }
+    const result = {
+      summary: candidate.summary.slice(0, 2000),
+      recommendations: candidate.recommendations
+        .filter((r) => typeof r === "string")
+        .slice(0, 8)
+        .map((r) => r.slice(0, 400)),
+    };
+    if (withPanel) {
+      if (!Array.isArray(candidate.panel)) return fallback;
+      result.panel = candidate.panel
+        .filter((m) => m && typeof m.name === "string" && ["normal", "high", "low"].includes(m.flag))
+        .slice(0, 30)
+        .map((m) => ({
+          name: String(m.name).slice(0, 120),
+          value: String(m.value ?? "").slice(0, 20),
+          unit: String(m.unit ?? "").slice(0, 30),
+          range: String(m.range ?? "").slice(0, 40),
+          flag: m.flag,
+        }));
+    }
+    return result;
   } catch {
     // Model didn't return clean JSON — fall back rather than showing raw/malformed text.
+    return fallback;
   }
-
-  logLabsAnalysis({ sessionToken, panel, summary: parsed.summary });
-  return parsed;
 }
 
 // Models occasionally wrap JSON in ```json fences despite instructions not to.

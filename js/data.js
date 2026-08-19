@@ -187,6 +187,7 @@ const MOCK_EDUCATION = [
     typeAr: "فيديو",
     typeEn: "Video",
     minutes: 4,
+    video: "assets/breathing-exercises.mp4",
   },
   {
     titleAr: "برنامج صحة الأسرة الشهري",

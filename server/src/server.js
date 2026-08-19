@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
+import multer from "multer";
 import {
   generateCsrfToken,
   verifyCsrf,
@@ -11,16 +12,47 @@ import {
   isValidSessionToken,
   isValidMessage,
   isValidPanel,
+  isValidUploadMime,
+  MAX_UPLOAD_BYTES,
 } from "./security.js";
 import { getAIReply } from "./aiChat.js";
-import { getBloodTestAnalysis } from "./labsAnalysis.js";
+import { getBloodTestAnalysis, extractAndAnalyzeBloodTest } from "./labsAnalysis.js";
+
+// Memory storage only — the uploaded file (a real lab report, i.e. PHI) is
+// held in RAM just long enough to forward to Gemini and is never written
+// to disk. fileFilter rejects the wrong type before it's even buffered.
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_UPLOAD_BYTES },
+  fileFilter: (_req, file, cb) => {
+    if (!isValidUploadMime(file.mimetype)) {
+      return cb(new Error("invalid_mime"));
+    }
+    cb(null, true);
+  },
+});
+
+// Distinguishes Gemini's own quota/rate-limit errors (surfaced as status 429
+// from the SDK) from a genuine upstream failure — these aren't "the backend
+// is down," they're "the AI provider is temporarily out of capacity," which
+// the frontend should say plainly instead of pointing at server/README.md.
+function sendUpstreamError(res, err, label) {
+  console.error(`${label}:`, err);
+  if (err?.status === 429) {
+    return res.status(503).json({ error: "provider_rate_limited" });
+  }
+  res.status(502).json({ error: "upstream_error" });
+}
 
 const PORT = process.env.PORT || 8787;
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "http://localhost:8080";
 
 const app = express();
 
-app.use(helmet());
+// This API is intentionally called cross-origin (frontend on :8080, this
+// server on :8787) — helmet's default same-origin CORP would make the
+// browser discard the response even though CORS allows it below.
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(
   cors({
     origin: FRONTEND_ORIGIN,
@@ -73,8 +105,7 @@ app.post("/api/ai-chat", async (req, res) => {
     });
     res.json({ reply, escalated });
   } catch (err) {
-    console.error("AI chat error:", err);
-    res.status(502).json({ error: "upstream_error" });
+    sendUpstreamError(res, err, "AI chat error");
   }
 });
 
@@ -104,9 +135,50 @@ app.post("/api/labs-analysis", async (req, res) => {
     });
     res.json(analysis);
   } catch (err) {
-    console.error("Labs analysis error:", err);
-    res.status(502).json({ error: "upstream_error" });
+    sendUpstreamError(res, err, "Labs analysis error");
   }
+});
+
+app.post("/api/labs-upload", (req, res) => {
+  upload.single("file")(req, res, async (err) => {
+    if (err) {
+      const code = err.message === "invalid_mime"
+        ? "invalid_file_type"
+        : err.code === "LIMIT_FILE_SIZE"
+          ? "file_too_large"
+          : "upload_error";
+      return res.status(400).json({ error: code });
+    }
+
+    if (!verifyCsrf(req)) {
+      return res.status(403).json({ error: "invalid_csrf" });
+    }
+
+    const { sessionToken, lang } = req.body || {};
+
+    if (!isValidSessionToken(sessionToken)) {
+      return res.status(400).json({ error: "invalid_session_token" });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: "missing_file" });
+    }
+
+    if (!consumeLabsToken(sessionToken)) {
+      return res.status(429).json({ error: "rate_limited" });
+    }
+
+    try {
+      const result = await extractAndAnalyzeBloodTest({
+        sessionToken,
+        fileBuffer: req.file.buffer,
+        mimeType: req.file.mimetype,
+        lang: lang === "en" ? "en" : "ar",
+      });
+      res.json(result);
+    } catch (e) {
+      sendUpstreamError(res, e, "Labs upload analysis error");
+    }
+  });
 });
 
 app.listen(PORT, () => {

@@ -129,6 +129,19 @@ const I18N = {
     en: "Couldn't get an analysis right now. Make sure the backend server is running (see server/README.md) and try again.",
   },
   aiAnalysisRateLimited: { ar: "الرجاء الانتظار قليلًا قبل طلب تحليل آخر.", en: "Please wait a moment before requesting another analysis." },
+  bloodPanelSubtitleUploaded: { ar: "مستخرج من الملف المرفوع", en: "Extracted from your uploaded file" },
+  uploadAnalyzing: { ar: "جارٍ قراءة الملف وتحليله بالذكاء الاصطناعي...", en: "Reading and analyzing the file with AI..." },
+  uploadAnalyzed: { ar: "تم التحليل ✓", en: "Analyzed ✓" },
+  uploadInvalidType: { ar: "نوع الملف غير مدعوم (PDF, JPG, PNG فقط)", en: "Unsupported file type (PDF, JPG, PNG only)" },
+  uploadTooLarge: { ar: "حجم الملف أكبر من 10 ميجابايت", en: "File is larger than 10MB" },
+  uploadNoPanelFound: {
+    ar: "ما قدرنا نلقى نتائج تحاليل واضحة بهذا الملف. جربي صورة أوضح أو تأكدي إنه تقرير مختبر.",
+    en: "We couldn't find clear lab results in this file. Try a clearer photo, or make sure it's a lab report.",
+  },
+  aiProviderRateLimited: {
+    ar: "خدمة الذكاء الاصطناعي وصلت للحد الأقصى من الاستخدام المسموح مؤقتًا. جربي بعد شوي.",
+    en: "The AI service has temporarily hit its usage limit. Please try again in a little while.",
+  },
 
   // Pharmacy
   pharmacyTitle: { ar: "الصيدلية الإلكترونية", en: "E-Pharmacy" },

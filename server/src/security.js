@@ -119,9 +119,10 @@ export function logTranscriptTurn({ sessionToken, role, text }) {
   });
 }
 
-export function logLabsAnalysis({ sessionToken, panel, summary }) {
+export function logLabsAnalysis({ sessionToken, panel, summary, source = "manual" }) {
   appendJsonl(LABS_ANALYSIS_FILE, {
     sessionToken,
+    source, // "manual" (mock/edited panel) or "upload" (extracted from a file)
     panel,
     summary: summary.slice(0, 4000),
     at: new Date().toISOString(),
@@ -174,4 +175,14 @@ export function isValidPanel(panel) {
     if (!["normal", "high", "low"].includes(flag)) return false;
     return true;
   });
+}
+
+/* ---------------------------- Lab file upload ---------------------------- */
+
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // matches the 10MB the frontend advertises
+
+const ALLOWED_UPLOAD_MIMES = new Set(["image/jpeg", "image/png", "application/pdf"]);
+
+export function isValidUploadMime(mimetype) {
+  return ALLOWED_UPLOAD_MIMES.has(mimetype);
 }

@@ -302,6 +302,10 @@ function wireAIChat() {
         });
         return;
       }
+      if (res.status === 503) {
+        appendChatBubble(box, { text: I18N.aiProviderRateLimited[lang], outgoing: false, tone: "warning" });
+        return;
+      }
       if (!res.ok) throw new Error(`status ${res.status}`);
 
       const data = await res.json();
@@ -391,14 +395,42 @@ const FLAG_STYLE = {
   low: { bg: "#FFF3E0", fg: "#FB8C00", key: "bpFlagLow" },
 };
 
+// null = showing the demo MOCK_BLOOD_PANEL; once a real file is uploaded and
+// extracted, this holds { name, value, unit, range, flag } rows straight
+// from the model (already in whatever language was requested at upload
+// time), and bloodPanelSourceFilename names the file they came from.
+let currentBloodPanel = null;
+let bloodPanelSourceFilename = null;
+
+function normalizeBloodPanelItem(m, lang) {
+  return {
+    name: "name" in m ? m.name : (lang === "ar" ? m.nameAr : m.nameEn),
+    value: m.value,
+    unit: m.unit,
+    range: m.range,
+    flag: m.flag,
+  };
+}
+
+function updateBloodPanelSubtitle() {
+  const el = document.getElementById("bloodPanelSubtitle");
+  if (!el) return;
+  const lang = AppState.lang;
+  el.textContent = bloodPanelSourceFilename
+    ? `${I18N.bloodPanelSubtitleUploaded[lang]} — ${bloodPanelSourceFilename}`
+    : I18N.bloodPanelSubtitle[lang];
+}
+
 function renderBloodPanel() {
   const lang = AppState.lang;
   const tbody = document.getElementById("bloodPanelTableBody");
+  updateBloodPanelSubtitle();
   if (!tbody) return;
-  tbody.innerHTML = MOCK_BLOOD_PANEL.map((m) => {
+  const rows = (currentBloodPanel || MOCK_BLOOD_PANEL).map((m) => normalizeBloodPanelItem(m, lang));
+  tbody.innerHTML = rows.map((m) => {
     const style = FLAG_STYLE[m.flag] || FLAG_STYLE.normal;
     return `<tr class="border-b last:border-0" style="border-color:#E1F5FE">
-      <td class="py-2 px-3">${Security.sanitize(lang === "ar" ? m.nameAr : m.nameEn)}</td>
+      <td class="py-2 px-3">${Security.sanitize(m.name)}</td>
       <td class="py-2 px-3 font-bold">${Security.sanitize(m.value)} <span class="text-gray-400 font-normal">${Security.sanitize(m.unit)}</span></td>
       <td class="py-2 px-3 text-gray-500">${Security.sanitize(m.range)}</td>
       <td class="py-2 px-3">
@@ -412,9 +444,11 @@ function renderBloodPanel() {
 
 /**
  * Sends the structured CBC panel (numeric values only — no name/ID/PHI) to
- * the backend, which calls the Claude API server-side and returns a
+ * the backend, which calls the Gemini API server-side and returns a
  * plain-language analysis + recommendations. Reuses the same CSRF token,
  * anonymous session token, and rate-limit pattern as the AI chat feature.
+ * Analyzes whatever is currently in the table — the demo panel, or a
+ * previously uploaded/extracted one.
  */
 function wireBloodPanelAnalysis() {
   const btn = document.getElementById("analyzeBloodPanelBtn");
@@ -440,13 +474,7 @@ function wireBloodPanelAnalysis() {
     loading.textContent = I18N.analyzing[lang];
     resultBox.appendChild(loading);
 
-    const panel = MOCK_BLOOD_PANEL.map((m) => ({
-      name: lang === "ar" ? m.nameAr : m.nameEn,
-      value: m.value,
-      unit: m.unit,
-      range: m.range,
-      flag: m.flag,
-    }));
+    const panel = (currentBloodPanel || MOCK_BLOOD_PANEL).map((m) => normalizeBloodPanelItem(m, lang));
 
     try {
       const res = await fetch(`${AI_CHAT_BASE_URL}/api/labs-analysis`, {
@@ -461,6 +489,10 @@ function wireBloodPanelAnalysis() {
 
       if (res.status === 429) {
         showBloodPanelMessage(resultBox, I18N.aiAnalysisRateLimited[lang], "warning");
+        return;
+      }
+      if (res.status === 503) {
+        showBloodPanelMessage(resultBox, I18N.aiProviderRateLimited[lang], "warning");
         return;
       }
       if (!res.ok) throw new Error(`status ${res.status}`);
@@ -524,23 +556,104 @@ function renderBloodPanelAnalysis(box, data, lang) {
   box.appendChild(disclaimer);
 }
 
+const UPLOAD_ACCEPTED_TYPES = new Set(["application/pdf", "image/jpeg", "image/png"]);
+const UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Wires the Labs dropzone to the real pipeline: a dropped/picked file is
+ * validated client-side, then sent as multipart/form-data to
+ * /api/labs-upload, where the backend forwards it to Gemini (vision/
+ * document understanding) to both extract the biomarker panel and produce
+ * the same plain-language analysis in one round trip. On success, that
+ * extracted panel replaces the demo table and feeds the analysis box below
+ * it — the same UI the manual "Analyze with AI" button renders into.
+ */
 function wireUpload() {
   const zone = document.getElementById("dropzone");
   const input = document.getElementById("fileInput");
   const fileList = document.getElementById("uploadedFiles");
+  const resultBox = document.getElementById("bloodPanelResult");
   if (!zone) return;
+
+  const sessionToken = Security.getAnonymousSessionToken();
 
   function addFile(file) {
     const li = document.createElement("li");
     li.className = "flex items-center justify-between card p-3";
     const name = document.createElement("span");
     name.textContent = `📄 ${file.name}`; // textContent — safe against XSS
-    const size = document.createElement("span");
-    size.className = "text-xs text-gray-400";
-    size.textContent = `${(file.size / 1024).toFixed(0)} KB`;
+    const status = document.createElement("span");
+    status.className = "text-xs text-gray-400";
+    status.textContent = `${(file.size / 1024).toFixed(0)} KB`;
     li.appendChild(name);
-    li.appendChild(size);
+    li.appendChild(status);
     fileList.prepend(li);
+    return status;
+  }
+
+  async function processFile(file) {
+    const status = addFile(file);
+    const lang = AppState.lang;
+
+    if (!UPLOAD_ACCEPTED_TYPES.has(file.type)) {
+      status.textContent = I18N.uploadInvalidType[lang];
+      status.style.color = "#E53935";
+      return;
+    }
+    if (file.size > UPLOAD_MAX_BYTES) {
+      status.textContent = I18N.uploadTooLarge[lang];
+      status.style.color = "#E53935";
+      return;
+    }
+    if (!Security.generalBucket.tryConsume()) {
+      status.textContent = I18N.aiAnalysisRateLimited[lang];
+      status.style.color = "#E53935";
+      return;
+    }
+
+    status.textContent = I18N.uploadAnalyzing[lang];
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("sessionToken", sessionToken);
+    formData.append("lang", lang);
+
+    try {
+      const res = await fetch(`${AI_CHAT_BASE_URL}/api/labs-upload`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "X-CSRF-Token": aiCsrfToken || "" }, // no Content-Type — browser sets the multipart boundary
+        body: formData,
+      });
+
+      if (res.status === 429) {
+        status.textContent = I18N.aiAnalysisRateLimited[lang];
+        status.style.color = "#E53935";
+        return;
+      }
+      if (res.status === 503) {
+        status.textContent = I18N.aiProviderRateLimited[lang];
+        status.style.color = "#E53935";
+        if (resultBox) showBloodPanelMessage(resultBox, I18N.aiProviderRateLimited[lang], "warning");
+        return;
+      }
+      if (!res.ok) throw new Error(`status ${res.status}`);
+
+      const data = await res.json();
+      status.textContent = I18N.uploadAnalyzed[lang];
+      status.style.color = "#43A047";
+
+      if (Array.isArray(data.panel) && data.panel.length) {
+        currentBloodPanel = data.panel;
+        bloodPanelSourceFilename = file.name;
+        renderBloodPanel();
+      }
+      if (resultBox) renderBloodPanelAnalysis(resultBox, data, lang);
+    } catch {
+      status.textContent = I18N.aiAnalysisError[lang];
+      status.style.color = "#E53935";
+      if (resultBox) showBloodPanelMessage(resultBox, I18N.aiAnalysisError[lang], "warning");
+    }
   }
 
   zone.addEventListener("click", () => input.click());
@@ -552,10 +665,10 @@ function wireUpload() {
   zone.addEventListener("drop", (e) => {
     e.preventDefault();
     zone.classList.remove("dragover");
-    [...e.dataTransfer.files].forEach(addFile);
+    [...e.dataTransfer.files].forEach(processFile);
   });
   input.addEventListener("change", () => {
-    [...input.files].forEach(addFile);
+    [...input.files].forEach(processFile);
   });
 }
 
@@ -641,7 +754,7 @@ function renderEducation() {
   grid.innerHTML = MOCK_EDUCATION.map((item, idx) => {
     const icon = item.typeAr === "فيديو" ? "🎬" : item.typeAr === "برنامج" ? "👨‍👩‍👧" : "📰";
     const actionLabel = item.typeAr === "فيديو" ? I18N.watchNow[lang] : I18N.readMore[lang];
-    const openAttr = item.bodyAr ? `data-article-idx="${idx}"` : "";
+    const openAttr = (item.bodyAr || item.video) ? `data-article-idx="${idx}"` : "";
     return `<div class="card p-4">
       <div class="text-3xl mb-3">${icon}</div>
       <span class="text-xs px-2 py-1 rounded-full" style="background:#E1F5FE;color:#0288D1">${Security.sanitize(lang === "ar" ? item.typeAr : item.typeEn)}</span>
@@ -664,12 +777,20 @@ function wireEducationModal() {
     const btn = e.target.closest("[data-article-idx]");
     if (!btn) return;
     const item = MOCK_EDUCATION[Number(btn.getAttribute("data-article-idx"))];
-    if (!item || !item.bodyAr) return;
+    if (!item || (!item.bodyAr && !item.video)) return;
 
     const lang = AppState.lang;
     titleEl.textContent = Security.sanitize(lang === "ar" ? item.titleAr : item.titleEn);
 
-    if (lang !== "ar") {
+    if (item.video) {
+      bodyEl.innerHTML = "";
+      const video = document.createElement("video");
+      video.src = item.video; // static path from our own data.js, not user input
+      video.controls = true;
+      video.className = "w-full rounded-card";
+      video.style.maxHeight = "70vh";
+      bodyEl.appendChild(video);
+    } else if (lang !== "ar") {
       bodyEl.innerHTML = `<p class="text-gray-500">${Security.sanitize(I18N.articleArabicOnly.en)}</p>`;
     } else {
       bodyEl.innerHTML = item.bodyAr.map(
@@ -684,9 +805,15 @@ function wireEducationModal() {
     overlay.classList.remove("hidden");
   });
 
-  closeBtn.addEventListener("click", () => overlay.classList.add("hidden"));
+  function closeModal() {
+    overlay.classList.add("hidden");
+    const video = bodyEl.querySelector("video");
+    if (video) video.pause(); // stop audio/playback once the modal is closed
+  }
+
+  closeBtn.addEventListener("click", closeModal);
   overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) overlay.classList.add("hidden");
+    if (e.target === overlay) closeModal();
   });
 }
 

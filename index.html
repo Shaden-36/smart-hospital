@@ -10,7 +10,12 @@
   Content-Security-Policy (delivered here via meta for a static build;
   in production this MUST be sent as a real HTTP response header, which
   also allows frame-ancestors / report-uri that <meta> cannot express).
-  Only the three CDNs this page actually needs are allow-listed.
+  Only the three CDNs this page actually needs are allow-listed. connect-src
+  also allow-lists the AI backend origin (js/app.js's AI_CHAT_BASE_URL) — the
+  AI chat and blood test analysis features run on a different port, so this
+  must match wherever that server actually runs — plus jsdelivr itself, since
+  Chart.js's CDN build ships a sourceMappingURL comment that DevTools tries
+  to fetch when open (harmless if blocked, but noisy in the console).
 -->
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'self';
@@ -18,7 +23,7 @@
   style-src 'self' https://fonts.googleapis.com 'unsafe-inline';
   font-src https://fonts.gstatic.com;
   img-src 'self' data:;
-  connect-src 'self';
+  connect-src 'self' http://localhost:8787 https://cdn.jsdelivr.net;
   frame-ancestors 'none';
   base-uri 'self';
   form-action 'self';
@@ -290,7 +295,7 @@
         <h2 class="font-bold" data-i18n="bloodPanelTitle">تحليل فحص الدم بالذكاء الاصطناعي</h2>
         <button id="analyzeBloodPanelBtn" type="button" class="btn-primary py-2 px-4 text-sm" data-i18n="analyzeWithAI">تحليل النتائج بالذكاء الاصطناعي</button>
       </div>
-      <p class="text-sm text-gray-400 mb-3" data-i18n="bloodPanelSubtitle">صورة الدم الكاملة (CBC) — 17/6/2026</p>
+      <p id="bloodPanelSubtitle" class="text-sm text-gray-400 mb-3">صورة الدم الكاملة (CBC) — 17/6/2026</p>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
