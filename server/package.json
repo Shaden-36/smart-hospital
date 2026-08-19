@@ -1,0 +1,20 @@
+{
+  "name": "vsh-ai-chat-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend for the Virtual Smart Hospital AI Mental Health Support chat and Blood Test Analysis — proxies Gemini API calls so the API key never reaches the browser.",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "@google/genai": "^1.9.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0"
+  }
+}

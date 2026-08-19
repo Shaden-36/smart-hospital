@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>المستشفى الذكي الافتراضي | Virtual Smart Hospital</title>
+<meta name="description" content="منصة صحية رقمية آمنة تدمج الاستشارات الطبية، السجل الصحي الموحد، الصيدلية الإلكترونية، والطوارئ الذكية." />
+
+<!--
+  Content-Security-Policy (delivered here via meta for a static build;
+  in production this MUST be sent as a real HTTP response header, which
+  also allows frame-ancestors / report-uri that <meta> cannot express).
+  Only the three CDNs this page actually needs are allow-listed.
+-->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' https://cdn.tailwindcss.com https://cdn.jsdelivr.net;
+  style-src 'self' https://fonts.googleapis.com 'unsafe-inline';
+  font-src https://fonts.gstatic.com;
+  img-src 'self' data:;
+  connect-src 'self';
+  frame-ancestors 'none';
+  base-uri 'self';
+  form-action 'self';
+  object-src 'none';
+">
+<meta name="referrer-policy" content="strict-origin-when-cross-origin" />
+<meta name="x-content-type-options" content="nosniff" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet" />
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="js/tailwind-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body class="app-bg">
+<a href="#main-content" class="skip-link">تخطي إلى المحتوى</a>
+
+<!-- ============ Quranic verse bar ============ -->
+<div class="verse-bar" data-i18n="verse">﴿ وَإِذَا مَرِضْتُ فَهُوَ يَشْفِينِ ﴾</div>
+
+<!-- ============ Header ============ -->
+<header class="site-header text-white">
+  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+    <div class="flex items-center gap-2">
+      <span class="text-2xl">🏥</span>
+      <span class="font-black text-lg hidden sm:inline" data-i18n="appName">المستشفى الذكي الافتراضي</span>
+    </div>
+
+    <div class="flex items-center gap-3 md:gap-5">
+      <p id="patientGreeting" class="hidden md:block font-bold text-sm lg:text-base"></p>
+
+      <button id="notifBell" class="relative bg-white/15 hover:bg-white/25 transition rounded-full w-10 h-10 flex items-center justify-center" aria-label="notifications">
+        🔔
+        <span id="notifBadge" class="badge-dot absolute -top-1 -end-1"></span>
+      </button>
+
+      <button id="langToggleBtn" class="bg-white/15 hover:bg-white/25 transition rounded-full px-3 py-1.5 text-sm font-bold">English</button>
+
+      <button id="mobileNavToggle" class="md:hidden bg-white/15 rounded-full w-10 h-10 flex items-center justify-center" aria-label="menu">☰</button>
+    </div>
+  </div>
+
+  <!-- Desktop nav -->
+  <nav class="hidden md:block border-t border-white/20">
+    <div class="max-w-7xl mx-auto px-4 flex gap-6 overflow-x-auto py-3 text-sm lg:text-base">
+      <a href="#" class="nav-tab" data-tab="home" data-i18n="nav_home">الرئيسية</a>
+      <a href="#" class="nav-tab" data-tab="consultations" data-i18n="nav_consultations">الاستشارات الطبية</a>
+      <a href="#" class="nav-tab" data-tab="ehr" data-i18n="nav_ehr">ملفي الطبي</a>
+      <a href="#" class="nav-tab" data-tab="labs" data-i18n="nav_labs">التحاليل والفحوصات</a>
+      <a href="#" class="nav-tab" data-tab="pharmacy" data-i18n="nav_pharmacy">الصيدلية</a>
+      <a href="#" class="nav-tab" data-tab="isolation" data-i18n="nav_isolation">الأمراض المعدية</a>
+      <a href="#" class="nav-tab" data-tab="education" data-i18n="nav_education">التثقيف الصحي</a>
+      <a href="#" class="nav-tab" style="color:#FFE1E1" data-tab="emergency" data-i18n="nav_emergency">الطوارئ</a>
+    </div>
+  </nav>
+
+  <!-- Mobile nav -->
+  <nav id="mobileNav" class="hidden md:hidden border-t border-white/20 bg-[#0288D1]">
+    <div class="px-4 py-2 flex flex-col text-sm">
+      <a href="#" class="nav-tab py-2" data-tab="home" data-i18n="nav_home">الرئيسية</a>
+      <a href="#" class="nav-tab py-2" data-tab="consultations" data-i18n="nav_consultations">الاستشارات الطبية</a>
+      <a href="#" class="nav-tab py-2" data-tab="ehr" data-i18n="nav_ehr">ملفي الطبي</a>
+      <a href="#" class="nav-tab py-2" data-tab="labs" data-i18n="nav_labs">التحاليل والفحوصات</a>
+      <a href="#" class="nav-tab py-2" data-tab="pharmacy" data-i18n="nav_pharmacy">الصيدلية</a>
+      <a href="#" class="nav-tab py-2" data-tab="isolation" data-i18n="nav_isolation">الأمراض المعدية</a>
+      <a href="#" class="nav-tab py-2" data-tab="education" data-i18n="nav_education">التثقيف الصحي</a>
+      <a href="#" class="nav-tab py-2" data-tab="emergency" data-i18n="nav_emergency">الطوارئ</a>
+    </div>
+  </nav>
+</header>
+
+<main id="main-content" class="max-w-7xl mx-auto px-4 py-6">
+
+  <!-- ======================================================= HOME ======================================================= -->
+  <section id="view-home" class="view-section">
+    <p class="text-sm text-gray-500 mb-4 md:hidden" id="patientGreetingMobile"></p>
+    <p class="text-xs text-gray-400 mb-6"><span data-i18n="lastVisitLabel">آخر زيارة</span>: <span id="lastVisitValue"></span></p>
+
+    <h2 class="font-black text-lg mb-3" data-i18n="urgentAlertsTitle">تنبيهات عاجلة</h2>
+    <div id="homeAlerts" class="grid gap-3 mb-8"></div>
+
+    <h2 class="font-black text-lg mb-3" data-i18n="vitalsTitle">المؤشرات الحيوية</h2>
+    <div id="vitalsGrid" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8"></div>
+
+    <div class="card p-5 mb-8">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="font-black text-lg" data-i18n="chartTitle">المخطط الصحي التفاعلي</h2>
+        <span class="text-xs text-gray-400" data-i18n="chartSubtitle">آخر 7 قراءات</span>
+      </div>
+      <div style="height: 280px;">
+        <canvas id="healthChart"></canvas>
+      </div>
+    </div>
+
+    <h2 class="font-black text-lg mb-3" data-i18n="quickActionsTitle">إجراءات سريعة</h2>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">
+      <button class="quick-tile p-4 flex flex-col items-center gap-2 text-sm font-bold" data-quick="consultations">
+        <span class="text-2xl">📅</span><span data-i18n="bookAppointment">حجز موعد</span>
+      </button>
+      <button class="quick-tile p-4 flex flex-col items-center gap-2 text-sm font-bold" data-quick="consultations">
+        <span class="text-2xl">🎥</span><span data-i18n="instantConsult">استشارة فورية</span>
+      </button>
+      <button class="quick-tile p-4 flex flex-col items-center gap-2 text-sm font-bold" data-quick="pharmacy">
+        <span class="text-2xl">💊</span><span data-i18n="orderMedicine">طلب دواء</span>
+      </button>
+      <button class="quick-tile p-4 flex flex-col items-center gap-2 text-sm font-bold" data-quick="labs">
+        <span class="text-2xl">📤</span><span data-i18n="uploadLab">رفع تحليل</span>
+      </button>
+      <button class="quick-tile p-4 flex flex-col items-center gap-2 text-sm font-bold text-red-500" style="color:#FF5252" data-quick="emergency">
+        <span class="text-2xl">🆘</span><span data-i18n="sosCall">اتصال طوارئ</span>
+      </button>
+    </div>
+
+    <h2 class="font-black text-lg mb-3" data-i18n="recommendationsTitle">توصيات مخصصة لك</h2>
+    <div class="grid sm:grid-cols-2 gap-4">
+      <div class="card p-5">
+        <p class="font-bold mb-1">🏃 <span data-i18n="exerciseTitle">برنامج التمارين</span></p>
+        <p class="text-sm text-gray-500" data-i18n="exerciseBody">المشي 30 دقيقة يوميًا، 5 أيام أسبوعيًا، لتحسين ضغط الدم.</p>
+      </div>
+      <div class="card p-5">
+        <p class="font-bold mb-1">🥗 <span data-i18n="dietTitle">النظام الغذائي المقترح</span></p>
+        <p class="text-sm text-gray-500" data-i18n="dietBody">تقليل الصوديوم والسكريات المضافة، وزيادة الألياف والخضروات الورقية.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================= CONSULTATIONS ======================================================= -->
+  <section id="view-consultations" class="view-section">
+    <h1 class="font-black text-2xl mb-1" data-i18n="consultTitle">الاستشارات الطبية</h1>
+    <p class="text-gray-500 mb-6" data-i18n="consultSubtitle">احجز موعدًا أو ابدأ استشارة فورية على مدار الساعة</p>
+
+    <div class="grid lg:grid-cols-3 gap-6 mb-8">
+      <div class="card p-5 lg:col-span-1">
+        <h2 class="font-bold mb-3" data-i18n="bookNewAppointment">حجز موعد جديد</h2>
+        <form id="bookingForm" class="flex flex-col gap-3">
+          <div>
+            <label class="text-xs text-gray-400" data-i18n="form_specialty">التخصص</label>
+            <select class="w-full border rounded-lg p-2 text-sm" style="border-color:#E1F5FE" required>
+              <option>طب باطني</option>
+              <option>طب نفسي</option>
+              <option>طب أطفال</option>
+              <option>جلدية</option>
+            </select>
+          </div>
+          <div class="flex gap-2">
+            <div class="flex-1">
+              <label class="text-xs text-gray-400" data-i18n="form_date">التاريخ</label>
+              <input type="date" class="w-full border rounded-lg p-2 text-sm" style="border-color:#E1F5FE" required />
+            </div>
+            <div class="flex-1">
+              <label class="text-xs text-gray-400" data-i18n="form_time">الوقت</label>
+              <input type="time" class="w-full border rounded-lg p-2 text-sm" style="border-color:#E1F5FE" required />
+            </div>
+          </div>
+          <div>
+            <label class="text-xs text-gray-400" data-i18n="form_notes">ملاحظات (اختياري)</label>
+            <textarea class="w-full border rounded-lg p-2 text-sm" style="border-color:#E1F5FE" rows="2" maxlength="500"></textarea>
+          </div>
+          <button type="submit" class="btn-primary py-2.5" data-i18n="form_submit">تأكيد الحجز</button>
+          <p id="bookingToast" class="hidden text-sm text-center text-green-600 font-bold"></p>
+        </form>
+      </div>
+
+      <div class="lg:col-span-2 flex flex-col gap-4">
+        <h2 class="font-bold" data-i18n="upcomingAppointments">المواعيد القادمة</h2>
+        <div id="appointmentsList" class="grid gap-3"></div>
+
+        <div class="card p-5" style="background:var(--gradient-btn); color:#fff;">
+          <h3 class="font-bold mb-1" data-i18n="instantConsultTitle">استشارة فورية على مدار الساعة</h3>
+          <p class="text-sm opacity-90 mb-3" data-i18n="instantConsultBody">تواصل مع طبيب مناوب خلال دقائق عبر الفيديو أو الصوت.</p>
+          <div class="flex gap-2">
+            <button class="bg-white/90 text-sky-700 rounded-card px-4 py-2 text-sm font-bold flex-1" style="color:#0288D1" data-i18n="startVideo">بدء فيديو</button>
+            <button class="bg-white/20 rounded-card px-4 py-2 text-sm font-bold flex-1" data-i18n="startAudio">بدء صوت</button>
+          </div>
+        </div>
+
+        <div class="card p-5">
+          <h3 class="font-bold mb-1">🔒 <span data-i18n="telepsychTitle">الطب النفسي عن بُعد</span></h3>
+          <p class="text-sm text-gray-500" data-i18n="telepsychBody">جلسات خاصة ومشفرة بالكامل، مع خيار الهوية المجهولة.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-5">
+      <h2 class="font-bold mb-3">🤖 <span data-i18n="aiMentalHealthTitle">مساعد الصحة النفسية الذكي</span></h2>
+      <div id="aiChatMessages" class="flex flex-col gap-2 h-56 overflow-y-auto p-3 rounded-card mb-3" style="background:#F5F7FA"></div>
+      <form id="aiChatForm" class="flex gap-2">
+        <input id="aiChatInput" type="text" maxlength="500" class="flex-1 border rounded-lg p-2 text-sm" style="border-color:#E1F5FE" data-i18n-ph="aiChatPlaceholder" placeholder="اكتب ما تشعر به الآن..." />
+        <button type="submit" class="btn-primary px-5" data-i18n="send">إرسال</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ======================================================= EHR ======================================================= -->
+  <section id="view-ehr" class="view-section">
+    <h1 class="font-black text-2xl mb-1" data-i18n="ehrTitle">ملفي الطبي الموحد</h1>
+    <p class="text-gray-500 mb-6" data-i18n="ehrSubtitle">سجلك الصحي الكامل في مكان واحد وآمن</p>
+
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="card p-5">
+        <h2 class="font-bold mb-3" data-i18n="personalInfo">المعلومات الشخصية</h2>
+        <div id="ehrPersonalInfo" class="grid grid-cols-2 gap-3 text-sm"></div>
+      </div>
+
+      <div class="card p-5">
+        <h2 class="font-bold mb-3" data-i18n="medicalHistory">التاريخ المرضي</h2>
+        <p class="text-sm text-gray-500" data-i18n="medicalHistoryBody">ارتفاع ضغط الدم (منذ 2021)، سكري النوع الثاني (منذ 2023). لا توجد عمليات جراحية سابقة.</p>
+      </div>
+
+      <div class="card p-5">
+        <h2 class="font-bold mb-3" data-i18n="allergies">الحساسية</h2>
+        <div id="ehrAllergies" class="flex flex-wrap gap-2"></div>
+      </div>
+
+      <div class="card p-5">
+        <h2 class="font-bold mb-3" data-i18n="activePrescriptions">الوصفات الفعّالة</h2>
+        <ul id="ehrPrescriptions" class="text-sm"></ul>
+      </div>
+
+      <div class="card p-5">
+        <h2 class="font-bold mb-3" data-i18n="labHistory">سجل التحاليل</h2>
+        <ul id="ehrLabs" class="text-sm"></ul>
+      </div>
+
+      <div class="card p-5">
+        <h2 class="font-bold mb-3" data-i18n="radiologyReports">تقارير الأشعة</h2>
+        <p class="text-sm text-gray-400" data-i18n="noRadiology">لا توجد تقارير أشعة حديثة</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================= LABS ======================================================= -->
+  <section id="view-labs" class="view-section">
+    <h1 class="font-black text-2xl mb-1" data-i18n="labsTitle">التحاليل والفحوصات</h1>
+    <p class="text-gray-500 mb-6" data-i18n="labsSubtitle">ارفع نتائجك وتابع مؤشراتك عبر الزمن</p>
+
+    <div class="grid lg:grid-cols-2 gap-6 mb-8">
+      <div class="card p-5">
+        <h2 class="font-bold mb-3" data-i18n="uploadTitle">رفع نتيجة تحليل</h2>
+        <div id="dropzone" class="dropzone p-8 text-center cursor-pointer">
+          <p class="text-3xl mb-2">📤</p>
+          <p class="font-bold" data-i18n="uploadDrag">اسحب الملف هنا أو اضغط للاختيار</p>
+          <p class="text-xs text-gray-400 mt-1" data-i18n="uploadFormats">PDF, JPG, PNG — حتى 10 ميجابايت</p>
+          <input id="fileInput" type="file" accept=".pdf,.jpg,.jpeg,.png" multiple class="hidden" />
+        </div>
+        <ul id="uploadedFiles" class="mt-4 flex flex-col gap-2"></ul>
+      </div>
+
+      <div class="card p-5">
+        <h2 class="font-bold mb-3" data-i18n="comparisonTitle">مقارنة تاريخية</h2>
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-start text-gray-400">
+              <th class="py-2 px-3 text-start" data-i18n="labName">التحليل</th>
+              <th class="py-2 px-3 text-start" data-i18n="labDate">التاريخ</th>
+              <th class="py-2 px-3 text-start" data-i18n="labStatus">الحالة</th>
+            </tr>
+          </thead>
+          <tbody id="labsTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card p-5 mb-8">
+      <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+        <h2 class="font-bold" data-i18n="bloodPanelTitle">تحليل فحص الدم بالذكاء الاصطناعي</h2>
+        <button id="analyzeBloodPanelBtn" type="button" class="btn-primary py-2 px-4 text-sm" data-i18n="analyzeWithAI">تحليل النتائج بالذكاء الاصطناعي</button>
+      </div>
+      <p class="text-sm text-gray-400 mb-3" data-i18n="bloodPanelSubtitle">صورة الدم الكاملة (CBC) — 17/6/2026</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-start text-gray-400">
+              <th class="py-2 px-3 text-start" data-i18n="bpMarker">المؤشر</th>
+              <th class="py-2 px-3 text-start" data-i18n="bpValue">القيمة</th>
+              <th class="py-2 px-3 text-start" data-i18n="bpRange">المعدل الطبيعي</th>
+              <th class="py-2 px-3 text-start" data-i18n="labStatus">الحالة</th>
+            </tr>
+          </thead>
+          <tbody id="bloodPanelTableBody"></tbody>
+        </table>
+      </div>
+      <div id="bloodPanelResult" class="mt-4 hidden"></div>
+    </div>
+
+    <div class="card p-5">
+      <h2 class="font-bold mb-3" data-i18n="trendTitle">تتبع المؤشرات عبر الزمن</h2>
+      <p class="text-sm text-gray-400" data-i18n="chartSubtitle">آخر 7 قراءات</p>
+      <div class="mt-3" style="height:260px">
+        <canvas id="labsTrendChart"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================= PHARMACY ======================================================= -->
+  <section id="view-pharmacy" class="view-section">
+    <h1 class="font-black text-2xl mb-1" data-i18n="pharmacyTitle">الصيدلية الإلكترونية</h1>
+    <p class="text-gray-500 mb-6" data-i18n="pharmacySubtitle">تتبع وصفاتك وطلباتك وإعادة التعبئة الذكية</p>
+    <div id="pharmacyList" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+  </section>
+
+  <!-- ======================================================= ISOLATION ======================================================= -->
+  <section id="view-isolation" class="view-section">
+    <h1 class="font-black text-2xl mb-1" data-i18n="isolationTitle">غرفة العزل الافتراضية</h1>
+    <p class="text-gray-500 mb-6" data-i18n="isolationSubtitle">متابعة يومية وتواصل مباشر مع الفريق الطبي</p>
+
+    <div class="isolation-room p-5 mb-6">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="font-bold" data-i18n="quarantineCounter">عداد إتمام الحجر الصحي</h2>
+        <span class="pulse-dot"></span>
+      </div>
+      <div class="flex items-end gap-2 mb-3">
+        <span id="quarantineCounterValue" class="text-4xl font-black" style="color:#0288D1">4</span>
+        <span class="text-gray-500 text-sm mb-1">/ <span id="quarantineTotal">10</span> <span data-i18n="daysRemaining">أيام متبقية</span></span>
+      </div>
+      <div class="w-full bg-white rounded-full h-3 overflow-hidden">
+        <div id="quarantineProgress" class="h-3 rounded-full" style="background:var(--gradient-btn); width:60%"></div>
+      </div>
+      <div class="flex justify-between text-xs text-gray-500 mt-2">
+        <span><span data-i18n="isolationStart">بداية العزل</span>: <span id="isolationStartValue"></span></span>
+        <span><span data-i18n="isolationEnd">نهاية العزل المتوقعة</span>: <span id="isolationEndValue"></span></span>
+      </div>
+    </div>
+
+    <div class="grid lg:grid-cols-2 gap-6">
+      <div class="card p-5">
+        <h2 class="font-bold mb-3" data-i18n="dailyCheckin">تسجيل الأعراض اليومي</h2>
+        <form id="checkinForm" class="flex flex-col gap-3">
+          <label class="flex items-center gap-2 text-sm"><input type="checkbox" /> <span data-i18n="symptomFever">حمى</span></label>
+          <label class="flex items-center gap-2 text-sm"><input type="checkbox" /> <span data-i18n="symptomCough">سعال</span></label>
+          <label class="flex items-center gap-2 text-sm"><input type="checkbox" /> <span data-i18n="symptomFatigue">إرهاق</span></label>
+          <label class="flex items-center gap-2 text-sm"><input type="checkbox" /> <span data-i18n="symptomBreath">ضيق تنفس</span></label>
+          <button type="submit" class="btn-primary py-2.5 mt-2" data-i18n="submitCheckin">إرسال التقرير اليومي</button>
+          <p id="checkinToast" class="hidden text-sm text-center text-green-600 font-bold"></p>
+        </form>
+      </div>
+
+      <div class="card p-5">
+        <h2 class="font-bold mb-3" data-i18n="isolationChatTitle">الدردشة مع فريق العزل الطبي</h2>
+        <div id="isolationChatMessages" class="flex flex-col gap-2 h-48 overflow-y-auto p-3 rounded-card mb-3" style="background:#F5F7FA"></div>
+        <form id="isolationChatForm" class="flex gap-2">
+          <input id="isolationChatInput" type="text" maxlength="500" class="flex-1 border rounded-lg p-2 text-sm" style="border-color:#E1F5FE" data-i18n-ph="isolationChatPlaceholder" placeholder="اكتب رسالتك للفريق الطبي..." />
+          <button type="submit" class="btn-primary px-5" data-i18n="send">إرسال</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================= EDUCATION ======================================================= -->
+  <section id="view-education" class="view-section">
+    <h1 class="font-black text-2xl mb-1" data-i18n="educationTitle">التثقيف الصحي</h1>
+    <p class="text-gray-500 mb-6" data-i18n="educationSubtitle">محتوى تفاعلي وتوصيات مخصصة بالذكاء الاصطناعي</p>
+
+    <div class="card p-5 mb-6" style="background:var(--gradient-btn); color:#fff;">
+      <h2 class="font-bold mb-1">✨ <span data-i18n="aiTipTitle">نصيحة اليوم من الذكاء الاصطناعي</span></h2>
+      <p class="text-sm opacity-90" data-i18n="aiTipBody">بناءً على قراءاتك الأخيرة، يُنصح بتقليل الملح وزيادة شرب الماء اليوم.</p>
+    </div>
+
+    <h2 class="font-bold mb-3" data-i18n="familyProgramsTitle">برامج صحة الأسرة</h2>
+    <div id="educationGrid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+  </section>
+
+  <!-- ======================================================= EMERGENCY ======================================================= -->
+  <section id="view-emergency" class="view-section">
+    <h1 class="font-black text-2xl mb-1" data-i18n="emergencyTitle">الطوارئ الذكية</h1>
+    <p class="text-gray-500 mb-6" data-i18n="emergencySubtitle">استجابة فورية عند الحاجة</p>
+
+    <div class="grid lg:grid-cols-2 gap-6">
+      <div class="card p-8 flex flex-col items-center text-center">
+        <h2 class="font-bold mb-4" data-i18n="sosButton">زر الطوارئ SOS</h2>
+        <button id="sosButton" class="btn-emergency relative overflow-hidden w-40 h-40 rounded-full text-2xl font-black flex items-center justify-center select-none">
+          <span id="sosFill" class="sos-fill"></span>
+          <span class="relative">SOS</span>
+        </button>
+        <p class="text-xs text-gray-400 mt-4" data-i18n="sosConfirm">اضغط مطولًا لتأكيد الإرسال</p>
+        <p id="sosStatus" class="hidden mt-4 text-sm font-bold"></p>
+      </div>
+
+      <div class="flex flex-col gap-4">
+        <div class="card p-5">
+          <h3 class="font-bold mb-2">🏥 <span data-i18n="nearestHospital">أقرب مستشفى متاح</span></h3>
+          <p class="text-sm text-gray-500">مستشفى الملك فهد التخصصي — 3.2 كم</p>
+          <button class="btn-secondary px-4 py-1.5 text-sm mt-3" data-i18n="shareLocation">مشاركة الموقع</button>
+        </div>
+        <div class="card p-5">
+          <h3 class="font-bold mb-2">🚑 <span data-i18n="ambulanceStatus">حالة سيارة الإسعاف</span></h3>
+          <p class="text-sm text-gray-500"><span data-i18n="ambulanceDispatched">تم إرسال الإسعاف — الوصول المتوقع</span>: 8 <span data-i18n="minutesRead">دقائق</span></p>
+        </div>
+        <div class="card p-5">
+          <h3 class="font-bold mb-2">📞 <span data-i18n="emergencyContacts">جهات اتصال الطوارئ</span></h3>
+          <p class="text-sm text-gray-500">997 — الهلال الأحمر السعودي</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ Footer ============ -->
+<footer class="site-footer mt-10">
+  <div class="max-w-7xl mx-auto px-4 py-8 grid sm:grid-cols-2 md:grid-cols-4 gap-6 text-sm">
+    <div>
+      <p class="font-black text-lg mb-2" data-i18n="appName">المستشفى الذكي الافتراضي</p>
+      <p class="opacity-80" data-i18n="footerCompliance">متوافق مع معايير الخصوصية HIPAA و NDMO/PDPL</p>
+    </div>
+    <div>
+      <p class="font-bold mb-2" data-i18n="footerSecurity">الأمان والخصوصية</p>
+      <p class="opacity-80">🔒 E2EE · CSRF · CSP</p>
+    </div>
+    <div>
+      <p class="font-bold mb-2" data-i18n="footerContact">تواصل معنا</p>
+      <p class="opacity-80">support@vsh.example</p>
+    </div>
+    <div>
+      <p class="font-bold mb-2" data-i18n="footerAbout">عن المستشفى</p>
+      <p class="opacity-80">© 2026 — <span data-i18n="footerRights">جميع الحقوق محفوظة</span></p>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ Notifications modal (glassmorphism) ============ -->
+<div id="notifOverlay" class="modal-overlay hidden">
+  <div class="modal-glass p-6 w-[90%] max-w-md">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-bold" data-i18n="notifications">الإشعارات</h2>
+      <button id="notifClose" class="text-xl" aria-label="close">✕</button>
+    </div>
+    <ul id="notifList" class="flex flex-col gap-3"></ul>
+  </div>
+</div>
+
+<!-- ============ Article reader modal (glassmorphism) ============ -->
+<div id="articleOverlay" class="modal-overlay hidden">
+  <div class="modal-glass p-6 w-[90%] max-w-2xl max-h-[85vh] overflow-y-auto">
+    <div class="flex items-start justify-between mb-4 gap-3">
+      <h2 id="articleModalTitle" class="font-black text-lg"></h2>
+      <button id="articleClose" class="text-xl shrink-0" aria-label="close">✕</button>
+    </div>
+    <div id="articleModalBody" class="flex flex-col gap-5 text-sm leading-relaxed"></div>
+  </div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/security.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
