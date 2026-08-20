@@ -1,0 +1,6 @@
+
+> vsh-ai-chat-server@1.0.0 start
+> node src/server.js
+
+AI chat backend listening on http://localhost:8787
+Allowing frontend origin: http://localhost:8080
